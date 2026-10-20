@@ -14,6 +14,11 @@ variable "app_port" {
   default     = 8080
 }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR block; used to scope DNS egress to the VPC resolver instead of 0.0.0.0/0"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags applied to all resources"
   type        = map(string)

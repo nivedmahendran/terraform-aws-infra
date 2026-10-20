@@ -58,6 +58,7 @@ module "security" {
 
   name     = "${var.name}-dev"
   vpc_id   = module.network.vpc_id
+  vpc_cidr = module.network.vpc_cidr
   app_port = 8080
   tags     = local.common_tags
 }
@@ -65,6 +66,22 @@ module "security" {
 # Application artifact bucket. Private by default, encrypted, versioned.
 resource "aws_s3_bucket" "app" {
   bucket = "${var.name}-dev-app-${data.aws_caller_identity.current.account_id}"
+}
+
+# Customer-managed rather than SSE-S3: artifacts are decryptable by anyone with
+# s3:GetObject under SSE-S3, whereas a CMK lets the key policy restrict who can
+# read the data even if they hold the object permission.
+resource "aws_kms_key" "app" {
+  description             = "Encrypts application artifacts"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = local.common_tags
+}
+
+resource "aws_kms_alias" "app" {
+  name          = "alias/${var.name}-dev-app"
+  target_key_id = aws_kms_key.app.key_id
 }
 
 resource "aws_s3_bucket_versioning" "app" {
@@ -80,8 +97,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "app" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.app.arn
     }
+    bucket_key_enabled = true
   }
 }
 

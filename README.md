@@ -62,6 +62,7 @@ terraform-aws-infra/
 ├── .github/workflows/terraform.yml
 ├── docker-compose.yml         # LocalStack for local plan/apply testing
 ├── trivy.yaml
+├── .trivyignore               # accepted findings, with reasoning
 └── .gitignore
 ```
 
@@ -149,6 +150,26 @@ Every push runs:
 2. **`terraform validate`** — every module and environment, `-backend=false`
 3. **Trivy** — misconfiguration scan, fails on HIGH/CRITICAL
 4. **tflint** — provider and style linting
+
+### On the one accepted Trivy finding
+
+Scanning is only worth having if the output is believed. `AWS-0104`
+(unrestricted egress) fires on the application group's HTTPS and HTTP rules:
+the check keys on the CIDR, not the port, so any rule that reaches package
+mirrors and AWS APIs without a NAT gateway trips it.
+
+Every other finding from that rule was fixed in code rather than suppressed:
+
+| Finding | Resolution |
+|---|---|
+| Unrestricted egress on the LB group | Scoped to the app security group — the LB has nowhere else to reach |
+| DNS egress to `0.0.0.0/0` | Scoped to the VPC resolver, `cidrhost(vpc_cidr, 2)/32` |
+| Subnets auto-assigning public IPs | Set `map_public_ip_on_launch = false` |
+| Buckets encrypted with the AWS-managed key | Customer-managed KMS keys with rotation |
+
+The two remaining rules are accepted explicitly in `.trivyignore`, which
+records the alternatives considered and the NAT-plus-endpoints design that
+would remove them. That file is a decision log, not a mute button.
 
 ## Requirements
 

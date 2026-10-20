@@ -48,10 +48,16 @@ resource "aws_internet_gateway" "this" {
 resource "aws_subnet" "public" {
   count = var.az_count
 
-  vpc_id                  = aws_vpc.this.id
-  cidr_block              = local.public_subnets[count.index]
-  availability_zone       = local.azs[count.index]
-  map_public_ip_on_launch = true
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = local.public_subnets[count.index]
+  availability_zone = local.azs[count.index]
+
+  # Left false deliberately. With auto-assign on, every instance launched here
+  # gets a public IP whether or not it needs one, which widens the attack
+  # surface silently. Public reachability is provided by the load balancer,
+  # which is the only thing in this design that should be internet-facing.
+  # Anything that genuinely needs a public IP asks for it explicitly.
+  map_public_ip_on_launch = false
 
   tags = merge(var.tags, {
     Name = "${var.name}-public-${local.azs[count.index]}"

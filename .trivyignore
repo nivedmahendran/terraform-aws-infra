@@ -1,0 +1,27 @@
+# Trivy findings that are accepted, with the reason.
+#
+# Trivy matches the ID and any trailing comment is ignored, so the reasoning is
+# recorded here for the reviewer rather than in a separate document. The rule is
+# simple: an entry here is a decision that was made, not a finding that was
+# hidden. If a finding can be fixed in code, it is fixed and not listed.
+
+# Security group rule allows unrestricted egress to any IP address.
+#
+# Fires on the application group's HTTPS (443) and HTTP (80) egress rules. The
+# check keys on the CIDR (0.0.0.0/0), not the port, so any rule letting an
+# instance reach package mirrors and AWS APIs without a NAT gateway trips it.
+#
+# Considered and rejected:
+#   * Allowing only AWS prefix lists plus a fixed mirror CIDR set. The app also
+#     pulls from upstream PyPI/npm/CDN endpoints whose ranges change without
+#     notice; a stale allow-list breaks deploys in a way that is harder to
+#     debug than the exposure it removes.
+#   * NAT gateway plus VPC endpoints, so no rule needs a public CIDR. This is
+#     the right design for a production account. It is a cost decision (~$32
+#     per month per AZ for NAT, plus endpoint hours), and it is a follow-up
+#     rather than something to change silently in a dev environment.
+#
+# DNS was the one destination that could be scoped precisely, and it was: both
+# UDP and TCP DNS egress now target the VPC resolver via cidrhost(vpc_cidr, 2)
+# instead of 0.0.0.0/0. That is why this list has one entry and not three.
+AWS-0104

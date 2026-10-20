@@ -50,6 +50,27 @@ resource "aws_s3_bucket" "state" {
   }
 }
 
+# The state bucket holds every secret in the infrastructure in plaintext —
+# database passwords, private keys, generated tokens. Encrypting it with a
+# customer-managed key rather than the AWS-managed `aws/s3` key gives us a key
+# policy we control, rotation, and an auditable CloudTrail trail of every use.
+resource "aws_kms_key" "state" {
+  description             = "Encrypts Terraform remote state"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = {
+    Name      = "${local.bucket_name}-state-key"
+    ManagedBy = "terraform"
+    Purpose   = "terraform-remote-state"
+  }
+}
+
+resource "aws_kms_alias" "state" {
+  name          = "alias/${local.bucket_name}-state"
+  target_key_id = aws_kms_key.state.key_id
+}
+
 # Versioning is the safety net: a bad apply can be rolled back by restoring a
 # previous state object version instead of hand-editing state.
 resource "aws_s3_bucket_versioning" "state" {
@@ -65,8 +86,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "aws:kms"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.state.arn
     }
+    # Cuts KMS API calls by ~99% on multi-part uploads; state files are large.
     bucket_key_enabled = true
   }
 }

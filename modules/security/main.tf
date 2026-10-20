@@ -23,6 +23,19 @@ resource "aws_security_group" "lb" {
   tags = merge(var.tags, { Name = "${var.name}-lb" })
 }
 
+# The load balancer must reach application instances. This egress rule is
+# scoped to the app security group rather than 0.0.0.0/0: the LB has no reason
+# to initiate connections anywhere else. "Allow all outbound" is the common
+# default and it is a finding for good reason — see AWS-0104.
+resource "aws_vpc_security_group_egress_rule" "lb_to_app" {
+  security_group_id            = aws_security_group.lb.id
+  description                  = "Reach application instances on the app port"
+  referenced_security_group_id = aws_security_group.app.id
+  ip_protocol                  = "tcp"
+  from_port                    = var.app_port
+  to_port                      = var.app_port
+}
+
 # HTTP/HTTPS are open to the internet on purpose: this is the public entry point.
 resource "aws_vpc_security_group_ingress_rule" "lb_http" {
   security_group_id = aws_security_group.lb.id
@@ -40,13 +53,6 @@ resource "aws_vpc_security_group_ingress_rule" "lb_https" {
   ip_protocol       = "tcp"
   from_port         = 443
   to_port           = 443
-}
-
-resource "aws_vpc_security_group_egress_rule" "lb_all" {
-  security_group_id = aws_security_group.lb.id
-  description       = "Allow all outbound"
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
 }
 
 resource "aws_security_group" "app" {
@@ -68,9 +74,50 @@ resource "aws_vpc_security_group_ingress_rule" "app_from_lb" {
   to_port                      = var.app_port
 }
 
-resource "aws_vpc_security_group_egress_rule" "app_all" {
+# App instances need outbound to pull packages and call AWS APIs. HTTPS and
+# HTTP are the only destinations that serves, so egress is scoped to those
+# ports rather than "all protocols".
+#
+# These two rules necessarily use 0.0.0.0/0 because package mirrors and AWS
+# API endpoints have no stable CIDR set to allow-list. Trivy's AVD-AWS-0104
+# fires on the CIDR regardless of port; the reasoning for accepting it, and
+# the NAT-plus-endpoints design that would remove it, are recorded in
+# trivy.yaml. Everything else that check flagged has been fixed in code.
+resource "aws_vpc_security_group_egress_rule" "app_https" {
   security_group_id = aws_security_group.app.id
-  description       = "Allow all outbound (package installs, AWS APIs)"
+  description       = "HTTPS to AWS APIs, package mirrors, and registries"
   cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "app_http" {
+  security_group_id = aws_security_group.app.id
+  description       = "HTTP for repository metadata (many mirrors are not TLS-only)"
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 80
+  to_port           = 80
+}
+
+# DNS is the one destination we can scope precisely: the VPC resolver is always
+# at the base of the VPC CIDR (VPC_CIDR + 2). Restricting this to the VPC
+# removes an unrestricted-egress finding for real, rather than suppressing it.
+resource "aws_vpc_security_group_egress_rule" "app_dns_udp" {
+  security_group_id = aws_security_group.app.id
+  description       = "DNS to the VPC resolver only"
+  cidr_ipv4         = "${cidrhost(var.vpc_cidr, 2)}/32"
+  ip_protocol       = "udp"
+  from_port         = 53
+  to_port           = 53
+}
+
+resource "aws_vpc_security_group_egress_rule" "app_dns_tcp" {
+  security_group_id = aws_security_group.app.id
+  description       = "DNS over TCP to the VPC resolver (large responses and zone transfers)"
+  cidr_ipv4         = "${cidrhost(var.vpc_cidr, 2)}/32"
+  ip_protocol       = "tcp"
+  from_port         = 53
+  to_port           = 53
 }
