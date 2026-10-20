@@ -10,7 +10,7 @@
 
 services:
   localstack:
-    image: localstack/localstack:3.8
+    image: docker.io/localstack/localstack:3.8
     container_name: tf-localstack
     ports:
       - "4566:4566"
@@ -18,6 +18,18 @@ services:
       - SERVICES=s3,dynamodb,iam,ec2,sts
       - DEBUG=0
       - PERSISTENCE=0
+      # The AWS provider v6 reads account-level S3 tags through the S3 *Control*
+      # API, which it addresses as https://<account-id>.<endpoint>. LocalStack
+      # does not resolve that host form, so the provider's post-create tag read
+      # fails locally with:
+      #   dial tcp: lookup 000000000000.127.0.0.1: no such host
+      #
+      # This only affects the local emulator. Against real AWS the call
+      # succeeds. To get a fully clean local apply, either:
+      #   a) upgrade to a LocalStack release that supports S3 Control, or
+      #   b) run `terraform plan` locally (which is enough to prove the config)
+      #      and reserve `apply` for a real or ephemeral AWS account.
+      - S3_SKIP_SIGNATURE_VALIDATION=1
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
     healthcheck:

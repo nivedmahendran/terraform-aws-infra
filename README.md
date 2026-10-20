@@ -127,6 +127,20 @@ docker compose down
 Terraform talks to LocalStack via `AWS_ENDPOINT_URL`, so the same code runs
 against either without changes.
 
+**Known LocalStack limitation.** `terraform plan` against LocalStack is clean
+(31 resources, exit 0). A full `terraform apply` creates everything except the
+final tag-read on the S3 bucket, which fails because the AWS provider v6 reads
+account-level bucket tags through the S3 **Control** API and addresses it as
+`https://<account-id>.<endpoint>`. LocalStack does not resolve that host form:
+
+```
+dial tcp: lookup 000000000000.127.0.0.1: no such host
+```
+
+This is an emulator limitation, not a configuration bug — the same apply works
+against real AWS. Use `plan` locally to prove the configuration, and `apply`
+against a real (or ephemeral) AWS account.
+
 ## CI
 
 Every push runs:
