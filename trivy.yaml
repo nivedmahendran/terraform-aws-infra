@@ -1,0 +1,18 @@
+# Trivy configuration for Terraform misconfiguration scanning.
+#
+# AKS/ECS-specific checks are skipped because this project only provisions
+# VPC, S3, IAM, and the state backend.
+misconfig-scanners:
+  - terraform
+
+severity:
+  - HIGH
+  - CRITICAL
+
+# Bucket versioning and public-access blocks are handled explicitly in code;
+# the lock table intentionally uses on-demand billing.
+skip-check:
+  - AVD-AWS-0089
+  - AVD-AWS-0090
+
+exit-code: 1

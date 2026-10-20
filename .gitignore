@@ -1,0 +1,37 @@
+# Terraform state — never commit
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Provider cache
+.terraform/
+crash.log
+crash.*.log
+
+# NOTE: .terraform.lock.hcl IS committed on purpose. It pins provider versions
+# so every machine and CI run resolves the same provider build. Removing it from
+# version control causes "works locally, fails in CI" drift.
+
+# Variable files that may hold secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config
+.terraformrc
+terraform.rc
+
+# Local plan output
+*.tfplan
+plan.out
+
+# Editor / OS noise
+.idea/
+.vscode/
+.DS_Store
